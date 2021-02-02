@@ -135,3 +135,5 @@ nasdaq 3000.csv
 Log Data/*
 .ipynb_checkpoints
 Data Interpretter.ipynb
+
+!Log Data/.gitkeep

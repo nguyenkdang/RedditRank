@@ -280,7 +280,8 @@ if __name__ == "__main__":
         #Build Data
         writedir = os.path.join(sys.path[0], 'Log Data')
         for f in os.listdir(writedir):
-            os.remove(os.path.join(writedir, f))
+            if f.endswith(".csv"): 
+                os.remove(os.path.join(writedir, f))
         
         exportHist()
         time.sleep(10*60)
