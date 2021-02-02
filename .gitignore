@@ -132,3 +132,6 @@ dmypy.json
 credentials.txt
 history.csv
 nasdaq 3000.csv
+Log Data/*
+.ipynb_checkpoints
+Data Interpretter.ipynb
