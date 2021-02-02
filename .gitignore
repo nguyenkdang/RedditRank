@@ -130,3 +130,5 @@ dmypy.json
 
 # custom
 credentials.txt
+history.csv
+nasdaq 3000.csv
