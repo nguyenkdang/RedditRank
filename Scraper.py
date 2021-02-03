@@ -9,30 +9,19 @@ with open(credentialPath) as f:
     username =  f.readline().strip()
     password=  f.readline().strip()
 
-reddit = praw.Reddit(client_id=id, \
-                     client_secret=secret, \
-                     user_agent=agent, \
-                     username=username, \
-                     password=password)
-
-stop = {"i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", 
-    "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", 
-    "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", 
-    "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", 
-    "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", 
-    "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", 
-    "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", "like"}
-custom = {'dd', 'f', 'new', "-", 'ceo', 'im', 'ipo', 'mod', 'k', 'tv'}
+reddit = praw.Reddit(client_id=id, client_secret=secret, user_agent=agent, username=username, password=password)
 
 class termScraper():
-    def __init__(self, sub, termPath, lim=None):
+    def __init__(self, sub, termPath, stopPath, lim=None):
         self.subreddit = sub
-        self.termPath = termPath
-        self.findTerms = self.buildFindTerms()
+        self.findTerms = self.buildTerms(termPath)
+        self.stopTerms = self.buildTerms(stopPath)
+        
         self.postData = self.buildData(lim)   
-        self.count, self.keyPost = self.buildIndex(self.postData, stop)
+        self.count, self.keyPost = self.buildIndex(self.postData)
         self.context = self.buildContext(self.count, self.keyPost)
     
+    #// UTILITY METHODS
     def strToDate(self, s):
         #Try to convert a string date into a datetime type object
         #s - possible str representing datetime
@@ -49,20 +38,21 @@ class termScraper():
             dt = datetime.strptime(dt, frmt)
     
         return dt
+
+
+    #// BUILD METHODS
+    def buildTerms(self, path, custom=[]):
+        ## Build a set of terms from a file
+        # path - str of path to file to build terms around
+        # custom - set containing additional terms
+        # return - set of all terms
+        terms = set()
+        with open(path) as f:
+            for line in f: terms.add(line.strip())
     
-    def buildFindTerms(self, custom=[]):
-        ## Build a set of tickers from a file
-        # custom - set containing additional tickers
-        # return - set of all tickers
-        findTerms = set()
-        with open(self.termPath) as f:
-            for line in f:
-                findTerms.add(line.split(',')[0])
-    
-        for t in custom:
-            findTerms.add(t)
-    
-        return findTerms
+        for t in custom: terms.add(t)
+
+        return terms
     
     def buildData(self, lim):
         ## Build a dictionary containing all the post collected thus far. Update the original
@@ -111,11 +101,10 @@ class termScraper():
     
         return dateRange
 
-    def buildIndex(self, data, stopWords):
+    def buildIndex(self, data):
         ## Uses a dict of posts to create an index of all words in the posts (excluding stop words) and their
         ## respective post ID. Also return a set of id's of post containing key terms. Also returns a dict
         ## containing each key terms and their respective post
-        # stopWords - set of words to not index
         # return count- dict { word: set(id) )
         # return keyPost - set(id's of post w/ key terms)
         count = {}
@@ -127,7 +116,7 @@ class termScraper():
             
                 #Add all words made of letters to count dict
                 nw = "".join(c for c in w if c.isalpha())
-                if nw.lower() not in stop and nw.lower() not in custom and nw != '':
+                if nw.lower() not in self.stopTerms and nw != '':
                     if nw in count:
                         count[nw].add(id)
                     else:
@@ -147,6 +136,7 @@ class termScraper():
                     else: context[key] = set(id)
     
         return context
+    
     #// RANK METHODS
     def getCount(self, data, key, pData = None):
         return len(data[key])
@@ -165,7 +155,7 @@ class termScraper():
         # title - str
         # top
         # otherCF
-        # return 
+        # return - {rank: val}
         if title != '': print('\n' + title)
         rank = {}
         n = 0
@@ -187,6 +177,7 @@ class termScraper():
     
         return rank
     
+    #// EXPORT METHODS
     def exportRank(self, rank, desc, fromDate, toDate, mode='w'):
         for key, val in rank.items():
             path = os.path.join(sys.path[0], 'Log Data/{}_{}.csv'.format(val[0],desc))
@@ -215,7 +206,7 @@ class termScraper():
         mode = 'w'
         while True:
             dateRange = self.buildDateRange(fromDate, toDate)
-            count, keyPost = self.buildIndex(dateRange, stop.union(custom))
+            count, keyPost = self.buildIndex(dateRange)
             context = self.buildContext(count, keyPost)
 
             topCount = self.rankData(count, dateRange, self.getCount)
@@ -239,13 +230,13 @@ class termScraper():
         fromTime = datetime(2020, 1, 1, 1, 1, 1) #toTime - timedelta(days=1)
     
         dateRange = self.buildDateRange(fromTime, toTime)
-        count, keyPost = self.buildIndex(dateRange, stop.union(custom))
+        count, keyPost = self.buildIndex(dateRange)
         context = self.buildContext(count, keyPost)
         
         #Rank Data
         topCount = self.rankData(count, dateRange, self.getCount, '--- TOP COUNT ---')
         topScore = self.rankData(count, dateRange, self.getScore, '--- TOP SCORE ---')
-        topSDensity = self.rankData(count, dateRange, self.getScoreDensity, '--- TOP SCORE DENSITY ---', otherCF= getCount)
+        topSDensity = self.rankData(count, dateRange, self.getScoreDensity, '--- TOP SCORE DENSITY ---', otherCF= self.getCount)
         topContxt = self.rankData(context, dateRange, self.getCount, '--- TOP CONTEXT ---')
         
         #Export Ranks
@@ -259,9 +250,8 @@ if __name__ == "__main__":
     subreddit = reddit.subreddit('wallstreetbets')
     customT = customT = {'DOGE'}
     tpath = os.path.join(sys.path[0], 'nasdaq 3000.csv')
+    spath = os.path.join(sys.path[0], 'stopWords.csv')
 
-    #s = termScraper('wallstreetbets', tpath )
-    
     while True: 
         #Build Data
         writedir = os.path.join(sys.path[0], 'Log Data')
@@ -269,10 +259,6 @@ if __name__ == "__main__":
             if f.endswith(".csv"): 
                 os.remove(os.path.join(writedir, f))
         
-        stocks = termScraper(subreddit, tpath, 500)
+        stocks = termScraper(subreddit, tpath, spath, 500)
         stocks.exportHist()
-        #exportHist()
         time.sleep(10*60)
-    
-        
-        
