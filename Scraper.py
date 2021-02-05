@@ -13,35 +13,43 @@ reddit = praw.Reddit(client_id=id, client_secret=secret, user_agent=agent, usern
 
 class termScraper():
     def __init__(self, sub, termPath, stopPath, lim=None):
+        # sub - subreddit object for reddit to scrape
+        # termPath - str to csv containing all the terms you want to look for
+        # stopPath - str to csv containing all the terms you want to avoid
         self.subreddit = sub
         self.findTerms = self.buildTerms(termPath)
         self.stopTerms = self.buildTerms(stopPath)
-        
-        self.postData = self.buildData(lim)   
-        self.count, self.keyPost = self.buildIndex(self.postData)
-        self.context = self.buildContext(self.count, self.keyPost)
+        self.postData = self.buildData(lim)
+        self.minID = min(self.postData, key=lambda key: self.postData[key][0] )
+        self.maxID = max(self.postData, key=lambda key: self.postData[key][0] )
     
     #// UTILITY METHODS
     def strToDate(self, s):
-        #Try to convert a string date into a datetime type object
-        #s - possible str representing datetime
+        ## Try to convert a string date into a datetime type object
+        # s - possible str to be converted to datetime
         dt = s
         if type(dt) == str:
             frmt = '%m/%d/%Y'
             if '-' in dt: frmt = '%Y-%m-%d' 
-            splt = dt.split(':') 
+            splt = len(dt.split(':')) 
             
-            if len(splt) >= 1: frmt += ' %H'
-            if len(splt) >= 2: frmt += ':%M'
-            if len(splt) >= 3: frmt += ':%S'    
+            if splt >= 1: frmt += ' %H'
+            if splt >= 2: frmt += ':%M'
+            if splt >= 3: frmt += ':%S'    
             
             dt = datetime.strptime(dt, frmt)
     
         return dt
 
+    def clearDir(self, path):
+        ## Clear all csv file in a directory
+        # path - str of directory path
+        for f in os.listdir(path):
+            if f.endswith(".csv"): 
+                os.remove(os.path.join(path, f))
 
     #// BUILD METHODS
-    def buildTerms(self, path, custom=[]):
+    def buildTerms(self, path, custom={}):
         ## Build a set of terms from a file
         # path - str of path to file to build terms around
         # custom - set containing additional terms
@@ -54,9 +62,10 @@ class termScraper():
 
         return terms
     
-    def buildData(self, lim):
+    def buildData(self, lim=1000):
         ## Build a dictionary containing all the post collected thus far. Update the original
         ## file containing all the post information with any new ones from the subreddit
+        # lim - amount of post to get from subreddit (max 1000)
         # return - dict {post_id:[date, title, upvote, upvote_ratio ]}
         n = 0
         postData = {}
@@ -68,7 +77,6 @@ class termScraper():
                 csvFile = csv.reader(f)
                 for row in csvFile:
                     if len(row[0]) == 0: continue
-
                     timeCheck = self.strToDate(row[1])
                     postData[row[0]] = [timeCheck, row[2], row[3], row[4]]
     
@@ -86,12 +94,11 @@ class termScraper():
         
             f.write(msg)
     
-        print(n)
+        print('Post retrived:', n)
         return postData
 
     def buildDateRange(self, startDate, endDate):
         ## Filter data to only be between two dates
-        # data - dict {post_id:[date, title, upvote, upvote_ratio ]}
         # startDate - datetime obj
         # endDate - datetime obj
         # return - dict {post_id:[date, title, upvote, upvote_ratio ]}
@@ -101,15 +108,16 @@ class termScraper():
     
         return dateRange
 
-    def buildIndex(self, data):
+    def buildIndex(self, postData):
         ## Uses a dict of posts to create an index of all words in the posts (excluding stop words) and their
         ## respective post ID. Also return a set of id's of post containing key terms. Also returns a dict
         ## containing each key terms and their respective post
-        # return count- dict { word: set(id) )
+        # postData - dict {post_id: [date, title, upvote, upvote_ratio]}
+        # return count - dict { word: set(id) }
         # return keyPost - set(id's of post w/ key terms)
         count = {}
         keyPost = set()
-        for id, val in data.items():
+        for id, val in postData.items():
             for w in val[1].split(' '):
                 if '🚀' in w.lower() or 'moon' in w.lower():
                     keyPost.add(id) #Add id to keypost set
@@ -126,7 +134,9 @@ class termScraper():
     
     def buildContext(self, count, keyPost):
         ## Take a dict of all the index word and compare each word id with a set of all the id
-        ## that contains a special word. Create a dict containing all 
+        ## that contains a special word. Create a dict containing all
+        # count - dict { word: set(id) }
+        # keyPost - set(id's of post w/ key terms)
         # return - dict { word: set(id) )
         context = {}
         for key, val in count.items():
@@ -138,127 +148,160 @@ class termScraper():
         return context
     
     #// RANK METHODS
-    def getCount(self, data, key, pData = None):
-        return len(data[key])
+    def getCount(self, count, key, postData = None):
+        return len(count[key])
 
-    def getScore(self, data, key, pData):
-        return sum([int(pData[p][2]) for p in data[key]])
+    def getScore(self, count, key, postData):
+        return sum([int(postData[p][2]) for p in count[key]])
 
-    def getScoreDensity(self, data, key, pData):
-        return self.getScore(data, key, pData)/self.getCount(data, key)
+    def getScoreDensity(self, count, key, postData):
+        return self.getScore(count, key, postData)/self.getCount(count, key)
 
-    def rankData(self, data, pData, calcFunc, title = '', top=10, otherCF=None):
-        ## Rank data
-        # data -
-        # pData
-        # calcFunc
-        # title - str
-        # top
-        # otherCF
-        # return - {rank: val}
-        if title != '': print('\n' + title)
+    def rankData(self, count, postData, calcFunc, title = '', top=10):
+        ## Rank data according to a spcific function
+        # count - dict { word: set(id) }
+        # postData - postData - dict {post_id: [date, title, upvote, upvote_ratio]}
+        # calcFunc - func Some function to specify what is being ranked
+        # title - str title of the rank. If provided, will also print rank at the end
+        # top - int Maximum amount of rankings
+        # return - dict {rank: (term, value)} 
         rank = {}
         n = 0
-        dc = data.copy()
+        countCopy = count.copy()
+        
         while n < top:
-            if len(dc) == 0: break
-    
-            s =  max(dc, key=lambda key: calcFunc(dc,key, pData) )
-            if s in self.findTerms:
-                m = round(calcFunc(dc, s, pData))
-                msg = "{} {}".format(s, m)
-                if otherCF != None: msg += " ({})".format(otherCF(dc, s))
-                if title != '': print(msg)
-
+            if len(countCopy) == 0: break
+            maxTerm =  max(countCopy, key=lambda key: calcFunc(countCopy, key, postData) )
+            if maxTerm in self.findTerms:
+                val = round(calcFunc(countCopy, maxTerm, postData))
+                if val == 0: break
                 n += 1
-                if m != 0: rank[n] = (s, m)
+                rank[n] = (maxTerm, val)
     
-            del dc[s]
-    
+            del countCopy[maxTerm]
+
+        #Print ranks if requested
+        if title != '':
+            msg = '\n' + title + '\n'
+            for r in range(n):
+                msg += '{}. {} {}\n'.format(r+1, rank[r+1][0], rank[r+1][1])
+            print(msg)
+
         return rank
+
+    def rankCount(self, count, postData, title=''):
+        return self.rankData(count, postData, self.getCount, title), 'Count'
     
+    def rankScore(self, count, postData, title=''):
+        return self.rankData(count, postData, self.getScore, title), 'Score'
+
+    def rankContext(self, context, postData, title=''):
+        return self.rankData(context, postData, self.getCount, title), 'Context'
+    
+    def rankSDensity(self, count, postData, title=''):
+        return self.rankData(count, postData, self.getScoreDensity, title), 'SDensity'
+
     #// EXPORT METHODS
-    def exportRank(self, rank, desc, fromDate, toDate, mode='w'):
-        for key, val in rank.items():
-            path = os.path.join(sys.path[0], 'Log Data/{}_{}.csv'.format(val[0],desc))
+    def exportRanks(self, ranks, fromTime, toTime, mode='w'):
         
-            '''
-            if os.path.exists(path):
-                with open(path, 'r') as f:
-                    csvFile = csv.reader(f)
-                    lastestTime = 0
-                    for row in csvFile:
-                        lastestTime = row[1] #flawed? - this assumes the rows are ordered
-                    
-                    if toDate <= datetime.strptime(lastestTime, '%Y-%m-%d %H:%M:%S'):
-                        continue
-            '''
+        for rank in ranks:
+            desc = rank[1]
+            for key, val in rank[0].items():
+                path = os.path.join(sys.path[0], 'Log Data/{}_{}.csv'.format(val[0],desc))
         
-            with open(path, mode) as f:            
-                f.write('{},{},{}\n'.format(fromDate, toDate, val[1]))
-        
-    def exportHist(self):
-        minID = min(self.postData, key=lambda key: self.postData[key][0] )
-        maxID = max(self.postData, key=lambda key: self.postData[key][0] )
-        minDate = self.postData[minID][0]
-        toDate = self.postData[maxID][0]
-        fromDate = toDate - timedelta(days=1) + timedelta(seconds=1)
+                with open(path, mode) as f:            
+                    f.write('{},{},{}\n'.format(fromTime, toTime, val[1]))
+
+    def exportFoward(self, cumulative=False):
+        path = os.path.join(sys.path[0], 'Log Data')
+        self.clearDir(path)
+
+        maxTime = self.postData[self.maxID][0]
+        fromTime = self.postData[self.minID][0] 
+        toTime = fromTime + timedelta(days=1) - timedelta(seconds=1)
         mode = 'w'
         while True:
-            dateRange = self.buildDateRange(fromDate, toDate)
+            if toTime > maxTime: toTime = maxTime
+            dateRange = self.buildDateRange(fromTime, toTime)
             count, keyPost = self.buildIndex(dateRange)
             context = self.buildContext(count, keyPost)
 
-            topCount = self.rankData(count, dateRange, self.getCount)
-            topScore = self.rankData(count, dateRange, self.getScore)
-            topContxt = self.rankData(context, dateRange, self.getCount)
-            #topSDensity = rankData(count, dateRange, getScoreDensity)
-            
-            self.exportRank(topContxt, 'Context', fromDate, toDate, mode)
-            self.exportRank(topCount, 'Count', fromDate, toDate, mode)
-            self.exportRank(topScore, 'Score', fromDate, toDate, mode)
-            #exportRank2(topSDensity, 'SDensity', fromDate, toDate, mode)
+            topCount = self.rankCount(count, dateRange)
+            topScore = self.rankScore(count, dateRange)
+            topContxt = self.rankContext(context, dateRange)
+            tops = [topCount, topScore, topContxt]
 
-            fromDate -= timedelta(days=1)
-            toDate -= timedelta(days=1)
+            self.exportRanks(tops, fromTime, toTime, mode)
+
+            if toTime == maxTime: break
+            if not cumulative: fromTime += timedelta(days=1)
+            toTime += timedelta(days=1)
             mode = 'a+'
-            #if toDate < minDate: break
-            if fromDate < minDate: break #fromDate = minDate
-    
-    def exportAll(self):
-        toTime = datetime.now().replace(microsecond=0)
-        fromTime = datetime(2020, 1, 1, 1, 1, 1) #toTime - timedelta(days=1)
-    
-        dateRange = self.buildDateRange(fromTime, toTime)
-        count, keyPost = self.buildIndex(dateRange)
-        context = self.buildContext(count, keyPost)
         
-        #Rank Data
-        topCount = self.rankData(count, dateRange, self.getCount, '--- TOP COUNT ---')
-        topScore = self.rankData(count, dateRange, self.getScore, '--- TOP SCORE ---')
-        topSDensity = self.rankData(count, dateRange, self.getScoreDensity, '--- TOP SCORE DENSITY ---', otherCF= self.getCount)
-        topContxt = self.rankData(context, dateRange, self.getCount, '--- TOP CONTEXT ---')
+        print('Export Complete\n')
+
+    def exportBackward(self):
+        path = os.path.join(sys.path[0], 'Log Data')
+        self.clearDir(path)
         
-        #Export Ranks
-        self.exportRank(topContxt, 'Context', fromTime, toTime)
-        self.exportRank(topCount, 'Count', fromTime, toTime)
-        self.exportRank(topScore, 'Score', fromTime, toTime)
-        self.exportRank(topSDensity, 'SDensity', fromTime, toTime)
+        minTime = self.postData[self.minID][0]
+        toTime = self.postData[self.maxID][0]
+        fromTime = toTime - timedelta(days=1) + timedelta(seconds=1)
+        mode = 'w'
+        while True:
+            dateRange = self.buildDateRange(fromTime, toTime)
+            count, keyPost = self.buildIndex(dateRange)
+            context = self.buildContext(count, keyPost)
+
+            topCount = self.rankCount(count, dateRange)
+            topScore = self.rankScore(count, dateRange)
+            topContxt = self.rankContext(context, dateRange)
+            tops = [topCount, topScore, topContxt]
+
+            self.exportRanks(tops, fromTime, toTime, mode)
+
+            fromTime -= timedelta(days=1)
+            toTime -= timedelta(days=1)
+            mode = 'a+'
+            if fromTime < minTime: break 
+        
+        print('Export Complete\n')
+
+    def exportUpTo(self):
+        path = os.path.join(sys.path[0], 'Log Data')
+        self.clearDir(path)
+        
+        minTime = self.postData[self.minID][0]
+        toTime = self.postData[self.maxID][0]
+        fromTime = datetime(toTime.year, toTime.month, toTime.day) 
+        mode = 'w'
+        while True:
+            print(fromTime, toTime)
+            dateRange = self.buildDateRange(fromTime, toTime)
+            count, keyPost = self.buildIndex(dateRange)
+            context = self.buildContext(count, keyPost)
+
+            topCount = self.rankCount(count, dateRange)
+            topScore = self.rankScore(count, dateRange)
+            topContxt = self.rankContext(context, dateRange)
+            tops = [topCount, topScore, topContxt]
+
+            self.exportRanks(tops, fromTime, toTime, mode)
+
+            fromTime -= timedelta(days=1)
+            toTime -= timedelta(days=1)
+            mode = 'a+'
+            if fromTime < minTime: break 
+        
+        print('Export Complete\n')
 
 
 if __name__ == "__main__":
     subreddit = reddit.subreddit('wallstreetbets')
-    customT = customT = {'DOGE'}
     tpath = os.path.join(sys.path[0], 'nasdaq 3000.csv')
     spath = os.path.join(sys.path[0], 'stopWords.csv')
 
     while True: 
-        #Build Data
-        writedir = os.path.join(sys.path[0], 'Log Data')
-        for f in os.listdir(writedir):
-            if f.endswith(".csv"): 
-                os.remove(os.path.join(writedir, f))
-        
         stocks = termScraper(subreddit, tpath, spath, 500)
-        stocks.exportHist()
+        stocks.exportBackward()
         time.sleep(10*60)
