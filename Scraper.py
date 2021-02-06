@@ -203,7 +203,11 @@ class termScraper():
 
     #// EXPORT METHODS
     def exportRanks(self, ranks, fromTime, toTime, mode='w'):
-        
+        ## Write rank into the correct csv file, with their times and value
+        # ranks - dict {rank: (term, value)}
+        # fromTime - datetime object
+        # toTime - datetime object
+        # mode - str indicating whether file should be overwritten or appended
         for rank in ranks:
             desc = rank[1]
             for key, val in rank[0].items():
@@ -213,6 +217,8 @@ class termScraper():
                     f.write('{},{},{}\n'.format(fromTime, toTime, val[1]))
 
     def exportFoward(self, cumulative=False):
+        ## Export from earliest date to latest date
+        # cumulative - bool on wether to accumulate ranks
         path = os.path.join(sys.path[0], 'Log Data')
         self.clearDir(path)
 
@@ -241,6 +247,7 @@ class termScraper():
         print('Export Complete\n')
 
     def exportBackward(self):
+        ## Export from latest date to earliest date
         path = os.path.join(sys.path[0], 'Log Data')
         self.clearDir(path)
         
@@ -268,6 +275,7 @@ class termScraper():
         print('Export Complete\n')
 
     def exportUpTo(self):
+        ## Export from up to the time of the latest date, for every day
         path = os.path.join(sys.path[0], 'Log Data')
         self.clearDir(path)
         
