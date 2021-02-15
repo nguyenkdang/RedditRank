@@ -94,7 +94,7 @@ class termScraper():
         
             f.write(msg)
     
-        print('Post retrived:', n)
+        #print('Post retrived:', n)
         return postData
 
     def buildDateRange(self, startDate, endDate):
@@ -243,8 +243,6 @@ class termScraper():
             if not cumulative: fromTime += timedelta(days=1)
             toTime += timedelta(days=1)
             mode = 'a+'
-        
-        print('Export Complete\n')
 
     def exportBackward(self):
         ## Export from latest date to earliest date
@@ -271,8 +269,6 @@ class termScraper():
             toTime -= timedelta(days=1)
             mode = 'a+'
             if fromTime < minTime: break 
-        
-        print('Export Complete\n')
 
     def exportUpTo(self):
         ## Export from up to the time of the latest date, for every day
@@ -299,10 +295,7 @@ class termScraper():
             fromTime -= timedelta(days=1)
             toTime -= timedelta(days=1)
             mode = 'a+'
-            if fromTime < minTime: break 
-        
-        print('Export Complete\n')
-
+            if fromTime < minTime: break
 
 if __name__ == "__main__":
     subreddit = reddit.subreddit('wallstreetbets')
@@ -310,6 +303,7 @@ if __name__ == "__main__":
     spath = os.path.join(sys.path[0], 'stopWords.csv')
 
     while True: 
-        stocks = termScraper(subreddit, tpath, spath, 500)
+        stocks = termScraper(subreddit, tpath, spath, 150)
         stocks.exportBackward()
+        print("Export complete at {}".format(datetime.now()), end='\r')
         time.sleep(10*60)
