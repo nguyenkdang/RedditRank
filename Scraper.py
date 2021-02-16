@@ -1,5 +1,6 @@
 import praw, os, sys, csv, time
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
 credentialPath = os.path.join(sys.path[0], 'credentials.txt')
 with open(credentialPath) as f:
@@ -42,11 +43,31 @@ class termScraper():
         return dt
 
     def clearDir(self, path):
-        ## Clear all csv file in a directory
+        ## Delete all csv file in a directory
         # path - str of directory path
         for f in os.listdir(path):
             if f.endswith(".csv"): 
                 os.remove(os.path.join(path, f))
+
+    def clearCache(self, path, maxDay=1):
+        ## Delete csv files that have not been updated for a certain amount of days
+        # path - str of directory path
+        # maxDay - int of maximum amount of days not updated until getting deleted
+        maxDate = datetime.min
+        fileMax = {}
+        for f in os.listdir(path):
+            if f.endswith(".csv"):
+                fmax = datetime.min
+                with open( os.path.join(path, f), 'r') as fs:
+                    for line in fs:
+                        curDate = self.strToDate(line.split(',')[1])
+                        if curDate > fmax: fmax = curDate
+                    fileMax[f] = fmax
+                    if fmax > maxDate: maxDate = fmax
+                    
+        for key, val in fileMax.items():
+            if maxDate-val > timedelta(days=maxDay):
+                os.remove(os.path.join(path, key))
 
     #// BUILD METHODS
     def buildTerms(self, path, custom={}):
@@ -201,6 +222,17 @@ class termScraper():
     def rankSDensity(self, count, postData, title=''):
         return self.rankData(count, postData, self.getScoreDensity, title), 'SDensity'
 
+    def multiRanks(self, fromTime, toTime):
+        dateRange = self.buildDateRange(fromTime, toTime)
+        count, keyPost = self.buildIndex(dateRange)
+        context = self.buildContext(count, keyPost)
+
+        topCount = self.rankCount(count, dateRange)
+        topScore = self.rankScore(count, dateRange)
+        topContxt = self.rankContext(context, dateRange)
+        
+        return [topCount, topScore, topContxt]
+
     #// EXPORT METHODS
     def exportRanks(self, ranks, fromTime, toTime, mode='w'):
         ## Write rank into the correct csv file, with their times and value
@@ -228,21 +260,37 @@ class termScraper():
         mode = 'w'
         while True:
             if toTime > maxTime: toTime = maxTime
-            dateRange = self.buildDateRange(fromTime, toTime)
-            count, keyPost = self.buildIndex(dateRange)
-            context = self.buildContext(count, keyPost)
-
-            topCount = self.rankCount(count, dateRange)
-            topScore = self.rankScore(count, dateRange)
-            topContxt = self.rankContext(context, dateRange)
-            tops = [topCount, topScore, topContxt]
-
+            tops = self.multiRanks(fromTime, toTime)
             self.exportRanks(tops, fromTime, toTime, mode)
 
             if toTime == maxTime: break
             if not cumulative: fromTime += timedelta(days=1)
             toTime += timedelta(days=1)
             mode = 'a+'
+
+    def exportFowardSimple(self, cumulative=False):
+        ## Export from earliest date, but only every 24 hours (much processing power, but can't get constant updates)
+        path = os.path.join(sys.path[0], 'Log Data')
+        
+        maxpath = os.path.join(path, 'maxDate.txt')
+        maxTime = self.postData[self.maxID][0]
+        fromTime = self.postData[self.minID][0] 
+        toTime = fromTime + timedelta(days=1) - timedelta(seconds=1)
+        lastDate =  datetime.min
+        
+        if os.path.exists(maxpath):
+            with open(maxpath, 'r') as f:
+                lastDate = self.strToDate(f.readline().strip())
+        
+        while True:
+            if toTime > lastDate:
+                tops = self.multiRanks(fromTime, toTime)
+                self.exportRanks(tops, fromTime, toTime, 'a+')
+                with open(maxpath, 'w') as f: f.write(str(toTime))
+
+            if not cumulative: fromTime += timedelta(days=1)
+            toTime += timedelta(days=1)
+            if toTime > maxTime: break
 
     def exportBackward(self):
         ## Export from latest date to earliest date
@@ -254,15 +302,7 @@ class termScraper():
         fromTime = toTime - timedelta(days=1) + timedelta(seconds=1)
         mode = 'w'
         while True:
-            dateRange = self.buildDateRange(fromTime, toTime)
-            count, keyPost = self.buildIndex(dateRange)
-            context = self.buildContext(count, keyPost)
-
-            topCount = self.rankCount(count, dateRange)
-            topScore = self.rankScore(count, dateRange)
-            topContxt = self.rankContext(context, dateRange)
-            tops = [topCount, topScore, topContxt]
-
+            tops = self.multiRanks(fromTime, toTime)
             self.exportRanks(tops, fromTime, toTime, mode)
 
             fromTime -= timedelta(days=1)
@@ -280,30 +320,24 @@ class termScraper():
         fromTime = datetime(toTime.year, toTime.month, toTime.day) 
         mode = 'w'
         while True:
-            print(fromTime, toTime)
-            dateRange = self.buildDateRange(fromTime, toTime)
-            count, keyPost = self.buildIndex(dateRange)
-            context = self.buildContext(count, keyPost)
-
-            topCount = self.rankCount(count, dateRange)
-            topScore = self.rankScore(count, dateRange)
-            topContxt = self.rankContext(context, dateRange)
-            tops = [topCount, topScore, topContxt]
-
+            tops = self.multiRanks(fromTime, toTime)
             self.exportRanks(tops, fromTime, toTime, mode)
 
             fromTime -= timedelta(days=1)
             toTime -= timedelta(days=1)
             mode = 'a+'
             if fromTime < minTime: break
-
+    
+    
 if __name__ == "__main__":
     subreddit = reddit.subreddit('wallstreetbets')
     tpath = os.path.join(sys.path[0], 'nasdaq 3000.csv')
     spath = os.path.join(sys.path[0], 'stopWords.csv')
-
+    direct = os.path.join(sys.path[0], 'Log Data')
     while True: 
         stocks = termScraper(subreddit, tpath, spath, 150)
-        stocks.exportBackward()
+        stocks.exportFowardSimple()
+        stocks.clearCache(direct, 3)
+        
         print("Export complete at {}".format(datetime.now()), end='\r')
         time.sleep(10*60)
