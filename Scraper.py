@@ -12,6 +12,39 @@ with open(credentialPath) as f:
 
 reddit = praw.Reddit(client_id=id, client_secret=secret, user_agent=agent, username=username, password=password)
 
+def buildGrowthPlt(dataType):
+    directory = os.path.join(sys.path[0], 'Log Data/')
+    savePath = os.path.join(sys.path[0], 'plot_{}.png'.format(dataType))
+    for filename in os.listdir(directory):
+        if filename.endswith(".csv") == False: continue
+        path = directory+filename
+        vals = []
+        dates = []
+        fname = filename.split('.')[0]
+        ticker = fname.split('_')[0]
+        dt = fname.split('_')[1]
+        
+        if dt == dataType:
+            with open(path, 'r') as f:
+                
+                csvFile = csv.reader(f)
+                for row  in csvFile:
+                    if row[2].isnumeric(): 
+                        vals.append(int(row[2]))
+                        dates.append(datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S'))  
+            plt.plot(dates, vals, label=ticker)
+    
+    
+    plt.title(dataType)
+    plt.rcParams["figure.figsize"] = [15,20]
+    plt.legend()
+
+    figure = plt.gcf()
+    figure.set_size_inches(15, 20)
+    plt.savefig(savePath, dpi=100)
+
+    
+
 class termScraper():
     def __init__(self, sub, termPath, stopPath, lim=None):
         # sub - subreddit object for reddit to scrape
@@ -338,6 +371,6 @@ if __name__ == "__main__":
         stocks = termScraper(subreddit, tpath, spath, 150)
         stocks.exportFowardSimple()
         stocks.clearCache(direct, 3)
-        
+        buildGrowthPlt('Score')
         print("Export complete at {}".format(datetime.now()), end='\r')
         time.sleep(10*60)
