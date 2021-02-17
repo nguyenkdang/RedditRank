@@ -129,6 +129,7 @@ dmypy.json
 .pyre/
 
 # custom
+*.png
 credentials.txt
 history.csv
 nasdaq 3000.csv
