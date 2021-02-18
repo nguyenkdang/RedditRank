@@ -12,36 +12,48 @@ with open(credentialPath) as f:
 
 reddit = praw.Reddit(client_id=id, client_secret=secret, user_agent=agent, username=username, password=password)
 
-def buildGrowthPlt(dataType):
+def exportGrowthPlt(width, height):
+    ## Export picture graph of all data generated
+    # width - int of width of export image
+    # height - int of height of export image
     directory = os.path.join(sys.path[0], 'Log Data/')
-    savePath = os.path.join(sys.path[0], 'plot_{}.png'.format(dataType))
+    #{dataType:{ticker:[val,...],...}}
+    vals = {} 
+    dates = {}
     for filename in os.listdir(directory):
         if filename.endswith(".csv") == False: continue
         path = directory+filename
-        vals = []
-        dates = []
         fname = filename.split('.')[0]
         ticker = fname.split('_')[0]
         dt = fname.split('_')[1]
         
-        if dt == dataType:
-            with open(path, 'r') as f:
-                
-                csvFile = csv.reader(f)
-                for row  in csvFile:
-                    if row[2].isnumeric(): 
-                        vals.append(int(row[2]))
-                        dates.append(datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S'))  
-            plt.plot(dates, vals, label=ticker)
+        if dt not in vals: vals[dt] = {}
+        if dt not in dates: dates[dt] = {}
+        
+        with open(path, 'r') as f:
+            csvFile = csv.reader(f)
+            for row  in csvFile:
+                if row[2].isnumeric():        
+                    if ticker not in vals[dt]: vals[dt][ticker] = []
+                    vals[dt][ticker].append(int(row[2]))
+                        
+                    if ticker not in dates[dt]: dates[dt][ticker] = []
+                    dates[dt][ticker].append(datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S'))
     
+    plt.close('all')
     
-    plt.title(dataType)
-    plt.rcParams["figure.figsize"] = [15,20]
-    plt.legend()
-
-    figure = plt.gcf()
-    figure.set_size_inches(15, 20)
-    plt.savefig(savePath, dpi=100)
+    for key, val in vals.items():
+        savePath = os.path.join(sys.path[0], 'plot_{}.png'.format(key))
+        fig = plt.figure()
+        ax = plt.axes()
+        for k, v in val.items():
+            ax.plot(dates[key][k], v, label=k)
+    
+        fig.add_axes(ax)
+        plt.title(key)
+        plt.legend()
+        fig.set_size_inches(width, height)
+        plt.savefig(savePath, dpi=150)
 
     
 
@@ -283,7 +295,7 @@ class termScraper():
 
     def exportFoward(self, cumulative=False):
         ## Export from earliest date to latest date
-        # cumulative - bool on wether to accumulate ranks
+        # cumulative - bool on whether to accumulate ranks
         path = os.path.join(sys.path[0], 'Log Data')
         self.clearDir(path)
 
@@ -303,6 +315,7 @@ class termScraper():
 
     def exportFowardSimple(self, cumulative=False):
         ## Export from earliest date, but only every 24 hours (much processing power, but can't get constant updates)
+        # cumulative - bool on whether to accumulate ranks
         path = os.path.join(sys.path[0], 'Log Data')
         
         maxpath = os.path.join(path, 'maxDate.txt')
@@ -361,16 +374,16 @@ class termScraper():
             mode = 'a+'
             if fromTime < minTime: break
     
-    
 if __name__ == "__main__":
     subreddit = reddit.subreddit('wallstreetbets')
     tpath = os.path.join(sys.path[0], 'nasdaq 3000.csv')
     spath = os.path.join(sys.path[0], 'stopWords.csv')
     direct = os.path.join(sys.path[0], 'Log Data')
+    
     while True: 
         stocks = termScraper(subreddit, tpath, spath, 150)
         stocks.exportFowardSimple()
         stocks.clearCache(direct, 3)
-        buildGrowthPlt('Score')
+        exportGrowthPlt(15,20)
         print("Export complete at {}".format(datetime.now()), end='\r')
         time.sleep(10*60)
