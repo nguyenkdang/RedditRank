@@ -132,10 +132,12 @@ dmypy.json
 *.png
 credentials.txt
 history.csv
-nasdaq 3000.csv
-Log Data/*
+Log_data/*
+Plot_result/*
+src/input_file/*
 .ipynb_checkpoints
 Data Interpretter.ipynb
-stopWords.csv
 
-!Log Data/.gitkeep
+!Log_data/.gitkeep
+!Plot_result/.gitkeep
+!src/input_file/stopWords.csv
