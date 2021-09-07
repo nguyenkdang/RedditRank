@@ -1,1 +1,4 @@
 # RedditTermScraper
+
+## Summaary
+Using Reddit's Official data retrieval API, this program aims to log and rank the most popular term(s) in a specific subreddit. Ranking results are graphed and exported using Matplotlib for user friendly viewing. Unlike similar application, Reddit Rank provides a wide variety of ranking options to help strengthen result validity. Options includes ranking by count, density, score and even context. An inverted index was implemented to increase performance of the ranking function when scraping through larger and more popular subreddits. Stop words are also automatically excluded to make final ranking results more relevant to users. Logs are locally stored for other projects.

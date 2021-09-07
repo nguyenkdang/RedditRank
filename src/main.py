@@ -3,7 +3,6 @@ from datetime import datetime
 from utility import clearCache
 from plotData import exportGrowthPlt
 from termscraper import termScraper
-import pathlib
 
 credentialPath = os.path.join(sys.path[0], 'input_file/credentials')
 with open(credentialPath) as f:
